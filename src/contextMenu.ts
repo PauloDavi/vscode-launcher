@@ -1,11 +1,4 @@
-import {
-  app,
-  Menu,
-  dialog,
-  MenuItemConstructorOptions,
-  Tray,
-  nativeTheme,
-} from "electron";
+import { app, Menu, dialog, MenuItemConstructorOptions, Tray } from "electron";
 import * as path from "path";
 import {
   loadFolders,
@@ -16,7 +9,9 @@ import {
 } from "./database";
 import { exec } from "child_process";
 import prompt from "electron-prompt";
-import { Folder } from "@prisma/client";
+import { Icon, getIcon } from "./icons";
+import logger from "./logger";
+import { Folder } from "knex/types/tables";
 
 export const updateContextMenu = async (tray: Tray) => {
   const contextMenu = await createContextMenu(tray);
@@ -28,33 +23,30 @@ const createContextMenu = async (tray: Tray): Promise<Electron.Menu> => {
   const folders = await loadFolders();
 
   const favoriteMenuItems = await createMenuItems(
-    folders.filter((item) => item.isFavorite),
+    folders.filter((item) => item.is_favorite),
     tray
   );
   const normalMenuItems = await createMenuItems(
-    folders.filter((item) => !item.isFavorite),
+    folders.filter((item) => !item.is_favorite),
     tray
   );
-
-  const addIcon = nativeTheme.shouldUseDarkColors
-    ? path.join(__dirname, "icons", "add", "white.png")
-    : path.join(__dirname, "icons", "add", "dark.png");
-  const closeIcon = nativeTheme.shouldUseDarkColors
-    ? path.join(__dirname, "icons", "cross", "white.png")
-    : path.join(__dirname, "icons", "cross", "dark.png");
 
   const template: MenuItemConstructorOptions[] = [
     {
       label: "Adicionar Pasta",
-      icon: addIcon,
+      icon: getIcon(Icon.Add),
       click: async () => {
-        const result = await dialog.showOpenDialog({
-          properties: ["openDirectory"],
-        });
+        try {
+          const result = await dialog.showOpenDialog({
+            properties: ["openDirectory"],
+          });
 
-        if (!result.canceled && result.filePaths.length > 0) {
-          await addFolder(result.filePaths[0]);
-          await updateContextMenu(tray);
+          if (!result.canceled && result.filePaths.length > 0) {
+            await addFolder(result.filePaths[0]);
+            await updateContextMenu(tray);
+          }
+        } catch (error) {
+          logger.error(`Erro ao adicionar pasta: ${error}`);
         }
       },
     },
@@ -85,7 +77,7 @@ const createContextMenu = async (tray: Tray): Promise<Electron.Menu> => {
 
   template.push({
     label: "Sair",
-    icon: closeIcon,
+    icon: getIcon(Icon.Close),
     click: () => {
       app.quit();
     },
@@ -104,14 +96,15 @@ const createMenuItems = async (
     submenu: [
       {
         label: "Abrir no VS Code",
+        icon: getIcon(Icon.Directory),
         click: () => {
           exec(`code "${folder.path}"`, (error, stdout, stderr) => {
             if (error) {
-              console.error(`Erro: ${error.message}`);
+              logger.error(`Erro: ${error.message}`);
               return;
             }
             if (stderr) {
-              console.error(`Stderr: ${stderr}`);
+              logger.error(`Stderr: ${stderr}`);
               return;
             }
             console.log(`Stdout: ${stdout}`);
@@ -119,36 +112,45 @@ const createMenuItems = async (
         },
       },
       {
-        label: folder.isFavorite ? "Remover dos favoritos" : "Adicionar aos favoritos",
+        label: folder.is_favorite
+          ? "Remover dos favoritos"
+          : "Adicionar aos favoritos",
         type: "checkbox",
-        checked: folder.isFavorite,
+        icon: getIcon(Icon.Favorite),
+        checked: folder.is_favorite,
         click: async () => {
-          await updateFavorite(folder.id, !folder.isFavorite);
+          await updateFavorite(folder.id, !folder.is_favorite);
           await updateContextMenu(tray);
         },
       },
       {
         label: "Renomear",
+        icon: getIcon(Icon.Edit),
         click: async () => {
-          const newLabel = await prompt({
-            title: "Renomear projeto",
-            label: "Nome:",
-            inputAttrs: {
-              type: "text",
-              required: "true",
-            },
-            type: "input",
-            value: folder.label || path.basename(folder.path),
-          });
+          try {
+            const newLabel = await prompt({
+              title: "Renomear projeto",
+              label: "Nome:",
+              inputAttrs: {
+                type: "text",
+                required: "true",
+              },
+              type: "input",
+              value: folder.label || path.basename(folder.path),
+            });
 
-          if (newLabel !== null && newLabel !== "") {
-            await updateLabel(folder.id, newLabel);
-            await updateContextMenu(tray);
+            if (newLabel !== null && newLabel !== "") {
+              await updateLabel(folder.id, newLabel);
+              await updateContextMenu(tray);
+            }
+          } catch (error) {
+            logger.error(`Erro ao renomear projeto: ${error}`);
           }
         },
       },
       {
         label: "Remover",
+        icon: getIcon(Icon.Delete),
         click: async () => {
           await removeFolder(folder.id);
           await updateContextMenu(tray);

@@ -1,12 +1,11 @@
 import { app, Tray, BrowserWindow, nativeTheme } from "electron";
 import * as path from "path";
 import { updateContextMenu } from "./contextMenu";
-import * as dotenv from "dotenv";
-
-dotenv.config();
+import { Icon, getIcon } from "./icons";
+import "./setup";
 
 app.on("ready", () => {
-  const icon = path.join(__dirname, "icons", "app.png");
+  const icon = getIcon(Icon.App);
 
   new BrowserWindow({
     icon,

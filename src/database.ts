@@ -1,56 +1,63 @@
-import { PrismaClient } from "@prisma/client";
 import * as path from "path";
 import { app } from "electron";
+import Knex from 'knex';
 
 const userDataPath = app.getPath("userData");
 const dbPath = path.join(userDataPath, "folders.db");
 
-process.env.DATABASE_URL = `file:${dbPath}`;
+const knex = Knex({
+  client: 'sqlite3',
+  connection: {
+    filename: dbPath,
+  },
+  useNullAsDefault: true
+});
 
-const prisma = new PrismaClient();
+app.on('ready', async () => {
+  try {
+    await knex.migrate.latest();
+    console.log('Migrations executed successfully.');
+  } catch (error) {
+    console.error(`Error running migrations: ${error.message}`);
+  }
+});
 
 export const loadFolders = async () => {
-  return await prisma.folder.findMany({
-    orderBy: {
-      createdAt: "asc",
-    },
-  });
+  return await knex.select('*').from('folders').orderBy('created_at');
 };
 
 export const addFolder = async (folderPath: string) => {
-  return await prisma.folder.create({
-    data: {
-      path: folderPath,
-    },
+  return await knex('folders').insert({
+    path: folderPath,
+    created_at: new Date(),
+    updated_at: new Date()
   });
 };
 
 export const updateLabel = async (id: number, label: string) => {
-  return await prisma.folder.update({
-    where: {
-      id,
-    },
-    data: {
-      label,
-    },
+  return await knex('folders')
+  .where({ id })
+  .update({
+    label,
+    updated_at: new Date()
   });
 };
 
-export const updateFavorite = async (id: number, isFavorite: boolean) => {
-  return await prisma.folder.update({
-    where: {
-      id,
-    },
-    data: {
-      isFavorite,
-    },
-  });
-};
+export const updateFavorite = async (id: number, is_favorite: boolean) => {
+  try {
+    await knex('folders')
+    .where({ id })
+    .update({
+      is_favorite,
+      updated_at: new Date()
+    });
+  } catch (error) {
+    console.error(error);
+  }
+}
 
 export const removeFolder = async (id: number) => {
-  return await prisma.folder.delete({
-    where: {
-      id,
-    },
-  });
+  return await knex('folders')
+  .where({ id })
+  .del();
 };
